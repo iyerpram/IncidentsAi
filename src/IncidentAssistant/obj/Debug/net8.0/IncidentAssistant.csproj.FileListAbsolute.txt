@@ -1,5 +1,0 @@
-C:\Projects\IncidentsAI\src\IncidentAssistant\obj\Debug\net8.0\IncidentAssistant.csproj.AssemblyReference.cache
-C:\Projects\IncidentsAI\src\IncidentAssistant\obj\Debug\net8.0\IncidentAssistant.GeneratedMSBuildEditorConfig.editorconfig
-C:\Projects\IncidentsAI\src\IncidentAssistant\obj\Debug\net8.0\IncidentAssistant.AssemblyInfoInputs.cache
-C:\Projects\IncidentsAI\src\IncidentAssistant\obj\Debug\net8.0\IncidentAssistant.AssemblyInfo.cs
-C:\Projects\IncidentsAI\src\IncidentAssistant\obj\Debug\net8.0\IncidentAssistant.csproj.CoreCompileInputs.cache
