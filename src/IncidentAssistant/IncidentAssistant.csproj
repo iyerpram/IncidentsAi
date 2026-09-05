@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Provider-agnostic AI abstractions (IChatClient, IEmbeddingGenerator) -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="9.*" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
+    <!-- Plain OpenAI SDK (api.openai.com, not Azure) -->
+    <!-- Vector store abstractions + Qdrant connector -->
+    <PackageReference Include="Microsoft.Extensions.VectorData.Abstractions" Version="10.*" />
+    <!-- Still branded "SemanticKernel" even though it implements the newer
+         Microsoft.Extensions.VectorData abstractions - and still prerelease
+         as of mid-2026, hence the -* wildcard to allow prerelease versions -->
+    <PackageReference Include="Microsoft.SemanticKernel.Connectors.Qdrant" Version="1.*-*" />
+    <PackageReference Include="OpenAI" Version="2.13.0" />
+    <PackageReference Include="Qdrant.Client" Version="1.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="SampleData\incidents.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

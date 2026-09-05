@@ -1,85 +1,137 @@
-# Incident Assistant (v2 — RAG with Qdrant + Microsoft Agent Framework)
+# IncidentsAi
 
 An AI-powered ops assistant that answers natural-language questions about
-production incidents, now with real retrieval instead of just stuffing
-everything into the prompt.
+production incidents, using RAG (retrieval-augmented generation) over
+Qdrant. Structured as a proper multi-project solution — a shared core
+library, a Minimal API, a Blazor web front end, and a test project — rather
+than a single console script.
 
-## What's new in v2
-- **Qdrant** stores an embedding of each incident (via OpenAI's
-  `text-embedding-3-small`), so retrieval scales past a handful of records.
-- **Microsoft Agent Framework** wraps the chat model into an `AIAgent` with
-  an incident-search tool. The agent decides for itself, per question,
-  whether it needs to search before answering — this is the "agentic" part,
-  vs. v1's fixed "always inject everything" approach.
-- The `[VectorStoreKey]`/`[VectorStoreData]`/`[VectorStoreVector]`
-  attributes (`Microsoft.Extensions.VectorData.Abstractions`) mean the
-  `IncidentRecord` class isn't tied to Qdrant specifically — swapping to
-  Azure AI Search or another store later is mostly a one-line change in
-  `Program.cs`, not a rewrite.
+## Solution structure
+
+```
+IncidentsAi.sln
+├── src/
+│   ├── IncidentsAi.Core/       # Shared logic: models, ingestion, RAG search
+│   │                           # tool, and the assistant service. No UI or
+│   │                           # hosting concerns - just the domain logic.
+│   ├── IncidentsAi.Api/        # ASP.NET Core Minimal API - POST /api/ask,
+│   │                           # POST /api/ingest
+│   ├── IncidentsAi.Console/    # Thin console wrapper around Core, for
+│   │                           # quick local testing without the API/Web layers
+│   └── IncidentsAi.Web/        # Blazor Server front end - calls the API
+│                               # over HTTP, not Core directly
+└── tests/
+    └── IncidentsAi.Tests/      # xUnit tests for the parts of Core that
+                                # don't need a live OpenAI/Qdrant connection
+```
+
+**Why this structure, not just one project:** separating Core from the API
+and Web layers means the RAG logic is testable in isolation, reusable across
+multiple front ends (console today, web now, potentially a CLI tool or Slack
+bot later), and the layering itself is exactly the kind of separation-of-
+concerns a principal-level interview will probe for.
 
 ## Prerequisites
-1. .NET 8 SDK
+1. .NET 10 SDK (`dotnet --version` should show `10.x`)
 2. Docker (to run Qdrant locally)
 3. An OpenAI API key from [platform.openai.com](https://platform.openai.com/api-keys)
 
 ## Setup
+
 ```bash
-# 1. Start Qdrant locally
+# 1. Start Qdrant
 docker compose up -d
 
-# 2. Restore packages
+# 2. Restore the whole solution
 dotnet restore
+# if the Qdrant connector fails to resolve (it's prerelease-only right now):
+dotnet add src/IncidentsAi.Core package Microsoft.SemanticKernel.Connectors.Qdrant --prerelease
 
-# 3. Set environment variables
+# 3. Set environment variables (all four projects read these)
 export OPENAI_API_KEY="sk-..."
-export OPENAI_CHAT_MODEL="gpt-4o-mini"          # optional, this is the default
-export OPENAI_EMBEDDING_MODEL="text-embedding-3-small"  # optional, this is the default
+export OPENAI_CHAT_MODEL="gpt-4o-mini"                   # optional, default shown
+export OPENAI_EMBEDDING_MODEL="text-embedding-3-small"   # optional, default shown
+export QDRANT_HOST="localhost"                           # optional, default shown
 
-# 4. Run it — this ingests incidents.json into Qdrant on startup, then
-#    drops you into the Q&A loop
-dotnet run
+# 4. Build the whole solution
+dotnet build
 ```
 
-You can browse the Qdrant collection at `http://localhost:6333/dashboard`
-while it's running — useful for actually *seeing* the vectors and payloads,
-which is a good thing to be able to show in an interview.
+## Running it
 
-⚠️ Keep your API key out of source control — the `export` above keeps it in
-your shell session only.
+**Option A — quick local test (console, no web layer):**
+```bash
+dotnet run --project src/IncidentsAi.Console
+```
+
+**Option B — the full API + Web experience:**
+```bash
+# Terminal 1 - start the API
+dotnet run --project src/IncidentsAi.Api
+# note the port it starts on (e.g. http://localhost:5080) and set
+# API_BASE_URL below to match if it differs
+
+# Terminal 2 - start the web front end
+export API_BASE_URL="http://localhost:5080"
+dotnet run --project src/IncidentsAi.Web
+```
+Then open the Web project's URL in a browser (it'll print the address on
+startup) and ask a question through the form. The first `/api/ask` call
+triggers ingestion automatically the first time you hit `/api/ingest` — call
+that once manually if you want ingestion to run before your first question:
+```bash
+curl -X POST http://localhost:5080/api/ingest
+```
+
+## Running the tests
+```bash
+dotnet test
+```
+These tests cover the data-loading and result-formatting logic in Core —
+deliberately the parts that don't need a live OpenAI or Qdrant connection,
+so they run fast and don't require API keys or Docker. They intentionally
+do **not** cover `IncidentAssistantService.AskAsync` or the live Qdrant
+search path — that would need either real API calls (slow, costs money,
+flaky in CI) or mocking `IEmbeddingGenerator`/`VectorStoreCollection`, which
+is a reasonable next step if you want to demonstrate integration-test
+patterns too.
 
 ## A note on package/API stability
-This project uses two of the newest pieces of the .NET AI stack — the
-Microsoft Agent Framework and `Microsoft.Extensions.VectorData` (including
-its Qdrant connector, `Microsoft.SemanticKernel.Connectors.Qdrant`) — both
-of which have been changing quickly through 2026 as they move toward GA.
-The Qdrant connector in particular is still prerelease-only; if
-`dotnet restore` complains about it, try:
+`Microsoft.Extensions.VectorData` and its Qdrant connector
+(`Microsoft.SemanticKernel.Connectors.Qdrant`) are both still moving
+quickly toward GA as of 2026, and the Qdrant connector specifically is
+prerelease-only. If `dotnet restore`/`build` fails on either package, check
+current versions at
+[nuget.org](https://www.nuget.org/packages/Microsoft.SemanticKernel.Connectors.Qdrant)
+and adjust the version in `IncidentsAi.Core.csproj` accordingly.
+
+**On the `.sln` file specifically:** it was hand-written rather than
+generated by `dotnet new sln`, so if it fails to load in Visual
+Studio/Rider or `dotnet build` can't parse it, regenerate it instead of
+debugging the GUIDs by hand:
 ```bash
-dotnet add package Microsoft.SemanticKernel.Connectors.Qdrant --prerelease
+rm IncidentsAi.sln
+dotnet new sln -n IncidentsAi
+dotnet sln add src/IncidentsAi.Core/IncidentsAi.Core.csproj
+dotnet sln add src/IncidentsAi.Api/IncidentsAi.Api.csproj
+dotnet sln add src/IncidentsAi.Console/IncidentsAi.Console.csproj
+dotnet sln add src/IncidentsAi.Web/IncidentsAi.Web.csproj
+dotnet sln add tests/IncidentsAi.Tests/IncidentsAi.Tests.csproj
 ```
-The package names and version numbers here are a best effort as of when
-this was written; if something doesn't resolve or compile on
-`dotnet restore`, check the current samples at
-[github.com/microsoft/agent-framework](https://github.com/microsoft/agent-framework)
-— the overall pattern (chat client + tools → agent, vector store
-abstractions → Qdrant connector) should still hold even if a method name
-or package version has moved on. Debugging this kind of drift is itself
-decent practice for working with a fast-moving ecosystem.
 
-## Roadmap (matches the Saturday cloud/AI track)
-- **v1:** simple "stuff it in the prompt" Q&A over a small JSON file.
-- **v2 (this version):** real retrieval via Qdrant + an agentic tool-calling
-  loop via Microsoft Agent Framework.
-- **v3:** deploy to Azure (App Service or Container Apps) — Qdrant can run
-  as a container alongside your app, or you can point at Qdrant Cloud.
-  Wire up Application Insights for observability, and add a minimal Blazor
-  front end so it's demoable in an interview instead of a console app.
-- **v4 (optional stretch):** connect it to real log data instead of the
-  sample JSON — e.g. ingest from your MicroserviceApp's logs.
+I couldn't compile or run any of this myself before handing it over (no
+.NET SDK/NuGet access in the environment I write code in) — treat it as a
+carefully-reasoned starting point, not a guaranteed clean build. If
+something breaks, share the exact error and I can help debug it.
 
-## Notes for interview talking points
-This project is deliberately designed to demonstrate three things at once:
-.NET AI integration (`Microsoft.Extensions.AI`, later Semantic Kernel),
-Azure hands-on deployment, and ops/reliability fluency (incident data,
-severity, root cause) — the exact areas that came up in your recent
-interview feedback.
+## Roadmap
+- **Done:** RAG over Qdrant, agentic tool-calling, multi-project structure
+  (Core / API / Console / Web / Tests).
+- **Next:** deploy the API to Azure (App Service or Container Apps), point
+  Qdrant at a hosted instance (Qdrant Cloud, or a container alongside the
+  API), wire up Application Insights, and deploy the Web front end
+  alongside it so the whole thing is reachable via a public link.
+- **Optional stretch:** connect it to real log data instead of the sample
+  JSON; add integration tests with mocked OpenAI/Qdrant dependencies;
+  persist conversation history per session in the API rather than starting
+  fresh on every request.
