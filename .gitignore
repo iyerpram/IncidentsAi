@@ -1,0 +1,31 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio Code
+.vscode/
+
+# Git (see note below - not usually needed)
+.git/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# .NET / NuGet
+*.nupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+# Environment / secrets - never commit API keys
+.env
+appsettings.*.local.json
